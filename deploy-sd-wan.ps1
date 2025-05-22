@@ -48,7 +48,6 @@ $registryName = "IPEnableRouter"
 
 # --- Function to Get ZeroTier Installation Status and ProductCode ---
 Function Get-ZeroTierInstallationInfo {
-    Write-Verbose "(Get-ZeroTierInstallationInfo): Function started."
     $uninstallKeys = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -56,29 +55,21 @@ Function Get-ZeroTierInstallationInfo {
     $zeroTierProduct = $null
     try {
         foreach ($keyPath in $uninstallKeys) {
-            Write-Verbose "(Get-ZeroTierInstallationInfo): Checking registry path: $keyPath"
             if (Test-Path $keyPath) {
-                Write-Verbose "(Get-ZeroTierInstallationInfo): Path exists: $keyPath"
-                
                 $productRegistryKeys = Get-ChildItem -Path $keyPath -ErrorAction SilentlyContinue
                 if ($null -eq $productRegistryKeys) {
-                    Write-Verbose "(Get-ZeroTierInstallationInfo): No subkeys found under $keyPath or error listing them."
                     continue
                 }
 
                 foreach ($productRegKey in $productRegistryKeys) {
-                    Write-Verbose "(Get-ZeroTierInstallationInfo): Processing subkey: $($productRegKey.PSChildName)"
                     try {
                         $properties = $productRegKey | Get-ItemProperty -ErrorAction Stop 
-                        
                         if ($properties.PSObject.Properties['DisplayName'] -and $properties.DisplayName -like "ZeroTier One*") {
-                            Write-Verbose "(Get-ZeroTierInstallationInfo): Found matching product: $($properties.DisplayName)"
                             $zeroTierProduct = $properties | Select-Object -Property DisplayName, DisplayVersion, ProductCode, UninstallString
                             break 
                         }
                     } catch {
                         Write-Warning "(Get-ZeroTierInstallationInfo): Error processing a specific registry entry '$($productRegKey.Name)'. Error: $($_.Exception.Message)."
-                        Write-Verbose "(Get-ZeroTierInstallationInfo): Faulty Key Path: $($productRegKey.PSPath)"
                     }
                 } 
                 
@@ -321,17 +312,17 @@ Function Configure-IPForwarding {
 
 # --- Function to Get ZeroTier Node ID ---
 Function Get-ZeroTierNodeId {
-    Write-Host "Retrieving ZeroTier Node ID..."
+    Write-Host "Retrieving Node ID..."
     try {
         Start-Sleep -Seconds 5 
         $nodeInfoOutput = & $Global:zeroTierCliPath info 2>&1
         $match = $nodeInfoOutput | Select-String -Pattern '200 info ([0-9a-fA-F]{10})'
         if ($match) {
             $nodeId = $match.Matches[0].Groups[1].Value
-            Write-Host "ZeroTier Node ID: $nodeId" -ForegroundColor Green
+            Write-Host "Node ID: $nodeId" -ForegroundColor Green
             return $nodeId
         } else {
-            Write-Warning "Could not parse Node ID from 'zerotier-cli info' output: $nodeInfoOutput"
+            Write-Warning "Could not parse Node ID from output: $nodeInfoOutput"
             $networksOutput = & $Global:zeroTierCliPath listnetworks -j 2>&1
             $networksJson = $networksOutput | ConvertFrom-Json -ErrorAction SilentlyContinue
             if ($networksJson) {
@@ -339,7 +330,7 @@ Function Get-ZeroTierNodeId {
                     if ($net.portDeviceName -and $net.address) {
                         $nodeIdFromNet = $net.portDeviceName
                          if ($nodeIdFromNet -match '^[0-9a-fA-F]{10}$') {
-                            Write-Host "ZeroTier Node ID (derived from listnetworks): $nodeIdFromNet" -ForegroundColor Green
+                            Write-Host "Node ID (derived from listnetworks): $nodeIdFromNet" -ForegroundColor Green
                             return $nodeIdFromNet
                          }
                     }
@@ -350,7 +341,7 @@ Function Get-ZeroTierNodeId {
         }
     }
     catch {
-        Write-Error "Failed to retrieve ZeroTier Node ID. Error: $($_.Exception.Message)"
+        Write-Error "Failed to retrieve Node ID. Error: $($_.Exception.Message)"
         return "Error retrieving"
     }
 }
@@ -441,7 +432,7 @@ try {
         $ipForwardingStatus = Configure-IPForwarding
 
         Write-Host "`n--- Configuration Summary ---" -ForegroundColor Cyan
-        Write-Host "ZeroTier Node ID     : $nodeIdentity"
+        Write-Host "Node ID     : $nodeIdentity"
         Write-Host "Joined Network ID    : $finalJoinedNetworkId"
         Write-Host "IPEnableRouter Status: $ipForwardingStatus"
 
