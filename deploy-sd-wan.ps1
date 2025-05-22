@@ -502,7 +502,6 @@ try {
     if ($Global:ScriptCrashed) {
         Read-Host "`nCRITICAL ERROR OCCURRED. Review messages above. Press Enter to exit script"
     } else {
-        Read-Host "`nScript execution finished or was exited. Press Enter to close window" 
     }
 
     # Stop Transcript Logging
