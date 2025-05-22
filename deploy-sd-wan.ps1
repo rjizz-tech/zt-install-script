@@ -9,7 +9,7 @@
     2.  If installed, prompts the user if they wish to re-install.
         - If yes, it attempts to uninstall the existing version silently.
     3.  If not installed, or if re-installation is chosen, it downloads the latest ZeroTier One MSI.
-    4.  Installs ZeroTier One silently in headless mode using ADDLOCAL=Service,Cli
+    4.  Installs ZeroTier One silently in headless mode using ZTHEADLESS=Yes.
     5.  Prompts the user to input a ZeroTier Network ID, trimming any whitespace.
     6.  Attempts to join the network using 'zerotier-cli.bat join <NetworkID>' with detailed job output.
     7.  Waits for a '200 join OK' response. If not received or if the command hangs for over 30 seconds, it re-prompts.
@@ -167,7 +167,7 @@ Function Install-ZeroTier {
         "/qn"                          
         "RUN_SERVICE=1"                
         "START_SERVICE_AFTER_INSTALL=1"
-        "ADDLOCAL=Service,Cli"
+        "ZTHEADLESS=Yes"               # Use ZTHEADLESS property for headless install
         "/norestart"                   
         "/L*V `"$installLogPath`""     
     )
@@ -196,11 +196,11 @@ Function Install-ZeroTier {
                     } else {
                         Write-Error "ZeroTier CLI not found at expected locations or derived service path after installation."
                         Write-Error "Please check the installation log: $installLogPath"
-                        return $false # Indicate failure to find CLI
+                        return $false 
                     }
                 } else {
                      Write-Error "ZeroTier service not found after install, cannot derive CLI path."
-                     return $false # Indicate failure to find CLI
+                     return $false 
                 }
             }
             Write-Host "ZeroTier CLI will be used from: $Global:zeroTierCliPath"
@@ -357,7 +357,7 @@ $Global:zeroTierCliPath = $null
 $Global:RebootNeededFromInstall = $false
 $Global:RebootNeededFromConfig = $false
 $Global:ScriptCrashed = $false
-$performFullConfiguration = $false # Flag to determine if we should do ZT join & config
+$performFullConfiguration = $false 
 
 try {
     Write-Host "Starting ZeroTier Installation and Configuration Script (official start message)..."
@@ -369,7 +369,6 @@ try {
         Write-Host "DEBUG SCRIPT_STEP: Get-ZeroTierInstallationInfo found an existing installation."
         Write-Host "ZeroTier One (Version: $($existingInstall.DisplayVersion)) is already installed."
         
-        # Attempt to determine CLI path for existing install
         if (Test-Path $zeroTierCliPathDefault) { $Global:zeroTierCliPath = $zeroTierCliPathDefault }
         elseif (Test-Path $zeroTierCliPathX86Default) { $Global:zeroTierCliPath = $zeroTierCliPathX86Default }
         else { 
@@ -393,7 +392,6 @@ try {
                         $performFullConfiguration = $true
                     } else {
                         Write-Error "Failed to install ZeroTier after uninstallation."
-                        # No Exit 1 here, let finally block handle exit with Read-Host
                     }
                 } else {
                      Write-Error "Failed to download ZeroTier after uninstallation."
@@ -406,7 +404,7 @@ try {
             if (-not $Global:zeroTierCliPath) {
                 Write-Error "ZeroTier CLI path could not be determined for the existing installation. Cannot proceed with configuration."
             } else {
-                $performFullConfiguration = $true # Configure existing install
+                $performFullConfiguration = $true 
             }
         }
     } else {
@@ -447,7 +445,7 @@ try {
     Write-Error "CRITICAL SCRIPT ERROR: An unhandled exception occurred in the main script block:"
     Write-Error "Error Type: $($_.Exception.GetType().FullName)"
     Write-Error "Error Message: $($_.Exception.Message)"
-    Write-Error "Stack Trace: $($_.Exception.StackTrace | Out-String)" # Use Out-String for full trace
+    Write-Error "Stack Trace: $($_.Exception.StackTrace | Out-String)" 
     Write-Error "Script Line Number: $($_.InvocationInfo.ScriptLineNumber)"
     Write-Error "Faulting Line Content: $($_.InvocationInfo.PositionMessage)"
 } finally {
@@ -456,7 +454,6 @@ try {
     if ($Global:RebootNeededFromInstall -or $Global:RebootNeededFromConfig) {
         Write-Host "`nA reboot is recommended for all changes to take full effect."
         $rebootChoiceFinal = ''
-        # Only prompt if script didn't crash before this point or if configuration was attempted
         if (-not $Global:ScriptCrashed -or $performFullConfiguration) {
             while ($rebootChoiceFinal -notmatch '^(y(es)?|n(o)?)$') {
                 $rebootChoiceFinal = (Read-Host -Prompt "Do you want to reboot now? (yes/no)").ToLower()
