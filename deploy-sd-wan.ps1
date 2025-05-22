@@ -2,23 +2,31 @@
 
 <#
 .SYNOPSIS
-    Downloads, installs, and configures ZeroTier One on Windows, with re-installation support and enhanced debugging.
+    Downloads, installs, and configures ZeroTier One on Windows, with re-installation support, logging, and status checks.
 .DESCRIPTION
     This script performs the following actions:
-    1.  Checks if ZeroTier One is already installed using a robust registry check.
-    2.  If installed, prompts the user if they wish to re-install.
+    1.  Starts transcript logging to sd-wan-install.log in the %TEMP% directory.
+    2.  Checks if ZeroTier One is already installed using a robust registry check.
+    3.  If installed, prompts the user if they wish to re-install.
         - If yes, it attempts to uninstall the existing version silently.
-    3.  If not installed, or if re-installation is chosen, it downloads the latest ZeroTier One MSI.
-    4.  Installs ZeroTier One silently in headless mode using ZTHEADLESS=Yes.
-    5.  Prompts the user to input a ZeroTier Network ID, trimming any whitespace.
-    6.  Attempts to join the network using 'zerotier-cli.bat join <NetworkID>' with detailed job output.
-    7.  Waits for a '200 join OK' response. If not received or if the command hangs for over 30 seconds, it re-prompts.
-    8.  Checks for and creates/sets the 'IPEnableRouter' registry value to 1.
-    9.  Outputs the ZeroTier Node ID, joined Network ID, and IP forwarding status.
-    10. Prompts the user if they want to reboot now or later, based on script actions.
+    4.  If not installed, or if re-installation is chosen, it downloads the latest ZeroTier One MSI.
+    5.  Installs ZeroTier One silently in headless mode using ZTHEADLESS=Yes.
+    6.  Prompts the user to input a ZeroTier Network ID, trimming any whitespace.
+    7.  Attempts to join the network using 'zerotier-cli.bat join <NetworkID>' with detailed job output.
+    8.  Waits for a '200 join OK' response. If not received or if the command hangs for over 30 seconds, it re-prompts.
+    9.  Checks for and creates/sets the 'IPEnableRouter' registry value to 1.
+    10. Outputs the ZeroTier Node ID, joined Network ID, and IP forwarding status.
+    11. After successful join, checks 'zerotier-cli listnetworks' for ACCESS_DENIED status for the joined network.
+    12. Prompts the user if they want to reboot now or later, based on script actions.
+    13. Stops transcript logging.
+.NOTES
+    Version: 1.5
+    Requires: Administrator privileges to install software and modify the registry.
+              Internet connectivity to download ZeroTier and join the network.
 #>
 
 # --- Script Configuration ---
+$scriptLogPath = Join-Path -Path $env:TEMP -ChildPath "sd-wan-install.log"
 $zeroTierDownloadUrl = "https://download.zerotier.com/dist/ZeroTier%20One.msi"
 $msiPath = Join-Path -Path $env:TEMP -ChildPath "ZeroTierOne.msi"
 $installLogPath = Join-Path -Path $env:TEMP -ChildPath "ZeroTierInstall.log"
@@ -40,7 +48,7 @@ $registryName = "IPEnableRouter"
 
 # --- Function to Get ZeroTier Installation Status and ProductCode ---
 Function Get-ZeroTierInstallationInfo {
-    Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): Function started."
+    Write-Verbose "(Get-ZeroTierInstallationInfo): Function started."
     $uninstallKeys = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -48,44 +56,44 @@ Function Get-ZeroTierInstallationInfo {
     $zeroTierProduct = $null
     try {
         foreach ($keyPath in $uninstallKeys) {
-            Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): Checking registry path: $keyPath"
+            Write-Verbose "(Get-ZeroTierInstallationInfo): Checking registry path: $keyPath"
             if (Test-Path $keyPath) {
-                Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): Path exists: $keyPath"
+                Write-Verbose "(Get-ZeroTierInstallationInfo): Path exists: $keyPath"
                 
                 $productRegistryKeys = Get-ChildItem -Path $keyPath -ErrorAction SilentlyContinue
                 if ($null -eq $productRegistryKeys) {
-                    Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): No subkeys found under $keyPath or error listing them."
+                    Write-Verbose "(Get-ZeroTierInstallationInfo): No subkeys found under $keyPath or error listing them."
                     continue
                 }
 
                 foreach ($productRegKey in $productRegistryKeys) {
-                    Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): Processing subkey: $($productRegKey.PSChildName)"
+                    Write-Verbose "(Get-ZeroTierInstallationInfo): Processing subkey: $($productRegKey.PSChildName)"
                     try {
-                        $properties = $productRegKey | Get-ItemProperty -ErrorAction Stop # Stop on error for THIS key, caught by inner try/catch
+                        $properties = $productRegKey | Get-ItemProperty -ErrorAction Stop 
                         
                         if ($properties.PSObject.Properties['DisplayName'] -and $properties.DisplayName -like "ZeroTier One*") {
-                            Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): Found matching product: $($properties.DisplayName)"
+                            Write-Verbose "(Get-ZeroTierInstallationInfo): Found matching product: $($properties.DisplayName)"
                             $zeroTierProduct = $properties | Select-Object -Property DisplayName, DisplayVersion, ProductCode, UninstallString
                             break 
                         }
                     } catch {
-                        Write-Warning "DEBUG (Get-ZeroTierInstallationInfo): Error processing a specific registry entry '$($productRegKey.Name)'. Error: $($_.Exception.Message)."
-                        Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): Faulty Key Path: $($productRegKey.PSPath)"
+                        Write-Warning "(Get-ZeroTierInstallationInfo): Error processing a specific registry entry '$($productRegKey.Name)'. Error: $($_.Exception.Message)."
+                        Write-Verbose "(Get-ZeroTierInstallationInfo): Faulty Key Path: $($productRegKey.PSPath)"
                     }
                 } 
                 
                 if ($zeroTierProduct) {
-                    Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): ZeroTier product found and processed. Breaking from outer loop."
+                    Write-Verbose "(Get-ZeroTierInstallationInfo): ZeroTier product found and processed. Breaking from outer loop."
                     break 
                 }
             } else {
-                Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): Path does not exist: $keyPath"
+                Write-Verbose "(Get-ZeroTierInstallationInfo): Path does not exist: $keyPath"
             }
         } 
     } catch {
-        Write-Error "DEBUG (Get-ZeroTierInstallationInfo): An unexpected error occurred during overall processing: $($_.Exception.Message)"
+        Write-Error "(Get-ZeroTierInstallationInfo): An unexpected error occurred during overall processing: $($_.Exception.Message)"
     }
-    Write-Verbose "DEBUG (Get-ZeroTierInstallationInfo): Function finished. Product found: $($zeroTierProduct -ne $null)"
+    Write-Verbose "(Get-ZeroTierInstallationInfo): Function finished. Product found: $($zeroTierProduct -ne $null)"
     return $zeroTierProduct
 }
 
@@ -235,6 +243,7 @@ Function Join-ZeroTierNetwork {
         
         $scriptBlockContent = {
             param($cliP, $netIdParam)
+            # These Write-Output lines are for job context debugging, they will appear in the transcript.
             Write-Output "Job received CLI Path: '$cliP'"
             Write-Output "Job received Network ID: '$netIdParam'"
             $output = & $cliP join $netIdParam 2>&1 
@@ -254,23 +263,23 @@ Function Join-ZeroTierNetwork {
             }
 
             $fullOutputString = ($outputLines | ForEach-Object {$_.ToString()}) -join [Environment]::NewLine
-            Write-Host "--- Job Output Start ---"
+            Write-Host "--- Job Output Start (captured by script) ---"
             Write-Host $fullOutputString
-            Write-Host "--- Job Output End ---"
+            Write-Host "--- Job Output End (captured by script) ---"
 
             if ($fullOutputString -match "200 join OK") {
                 Write-Host "Successfully joined network $networkId." -ForegroundColor Green
                 $networkJoined = $true
                 $joinedNetworkId = $networkId
             } else {
-                $cliErrorMessage = $fullOutputString
+                $cliErrorMessage = $fullOutputString # Default to full output
                 if ($fullOutputString -match "zerotier-one_cli.exe: invalid network id: `"$($networkId)`"") { 
                     $cliErrorMessage = "ZeroTier CLI reported: invalid network id '$networkId'"
                 } elseif ($fullOutputString -match "invalid network id") {
                      $cliErrorMessage = "ZeroTier CLI reported: invalid network id (check formatting or authorization)"
                 }
 
-                Write-Warning "Failed to join network $networkId. Response: $cliErrorMessage"
+                Write-Warning "Failed to join network $networkId. Response from CLI: $cliErrorMessage"
                 Write-Warning "Please check the Network ID and ensure the ZeroTier service is running and you are authorized on the network."
                 $ztService = Get-Service -Name "ZeroTierOneService" -ErrorAction SilentlyContinue
                 if ($ztService -and $ztService.Status -ne "Running") {
@@ -348,25 +357,31 @@ Function Get-ZeroTierNodeId {
 
 # --- Main Script Execution ---
 
-# SET VERBOSE PREFERENCE FOR DEBUGGING (REMOVE OR COMMENT OUT FOR NORMAL USE)
-$Global:VerbosePreference = "Continue" 
+# Remove explicit VerbosePreference setting for cleaner logs, relies on default or user set.
+# $Global:VerbosePreference = "Continue" 
 
-Write-Host "DEBUG SCRIPT_STEP: Main execution block started. Initializing global variables."
+# Start Transcript Logging
+try {
+    Start-Transcript -Path $scriptLogPath -Append -Force -ErrorAction SilentlyContinue
+} catch {
+    Write-Warning "Failed to start transcript logging to '$scriptLogPath'. Error: $($_.Exception.Message)"
+}
+
+Write-Host "Script execution started. Initializing variables."
 
 $Global:zeroTierCliPath = $null 
 $Global:RebootNeededFromInstall = $false
 $Global:RebootNeededFromConfig = $false
 $Global:ScriptCrashed = $false
 $performFullConfiguration = $false 
+$finalJoinedNetworkId = $null # To store the successfully joined network ID for ACCESS_DENIED check
 
 try {
-    Write-Host "Starting ZeroTier Installation and Configuration Script (official start message)..."
+    Write-Host "Starting ZeroTier Installation and Configuration Script..."
 
-    Write-Host "DEBUG SCRIPT_STEP: Calling Get-ZeroTierInstallationInfo..."
     $existingInstall = Get-ZeroTierInstallationInfo
     
     if ($existingInstall -ne $null) {
-        Write-Host "DEBUG SCRIPT_STEP: Get-ZeroTierInstallationInfo found an existing installation."
         Write-Host "ZeroTier One (Version: $($existingInstall.DisplayVersion)) is already installed."
         
         if (Test-Path $zeroTierCliPathDefault) { $Global:zeroTierCliPath = $zeroTierCliPathDefault }
@@ -408,7 +423,6 @@ try {
             }
         }
     } else {
-        Write-Host "DEBUG SCRIPT_STEP: Get-ZeroTierInstallationInfo found no existing installation."
         Write-Host "ZeroTier One is not currently installed. Proceeding with fresh installation."
         if (Download-ZeroTier) {
             if (Install-ZeroTier) {
@@ -422,23 +436,48 @@ try {
     }
 
     if ($performFullConfiguration -and $Global:zeroTierCliPath) {
-        Write-Host "DEBUG SCRIPT_STEP: Proceeding with ZeroTier network configuration..."
-        $joinedNetwork = Join-ZeroTierNetwork
+        $finalJoinedNetworkId = Join-ZeroTierNetwork # Store the joined network ID
         $nodeIdentity = Get-ZeroTierNodeId
         $ipForwardingStatus = Configure-IPForwarding
 
         Write-Host "`n--- Configuration Summary ---" -ForegroundColor Cyan
         Write-Host "ZeroTier Node ID     : $nodeIdentity"
-        Write-Host "Joined Network ID    : $joinedNetwork"
+        Write-Host "Joined Network ID    : $finalJoinedNetworkId"
         Write-Host "IPEnableRouter Status: $ipForwardingStatus"
 
+        # Check for ACCESS_DENIED status
+        if ($finalJoinedNetworkId) {
+            Write-Host "Checking network status for $finalJoinedNetworkId..."
+            try {
+                $networksListJson = & $Global:zeroTierCliPath listnetworks -j 2>&1
+                $networksList = $networksListJson | ConvertFrom-Json -ErrorAction SilentlyContinue
+                if ($networksList) {
+                    $joinedNetworkInfo = $networksList | Where-Object {$_.nwid -eq $finalJoinedNetworkId} | Select-Object -First 1
+                    if ($joinedNetworkInfo) {
+                        Write-Host "Status for network $finalJoinedNetworkId : $($joinedNetworkInfo.status)"
+                        if ($joinedNetworkInfo.status -eq "ACCESS_DENIED") {
+                            Write-Host "-------------------------------------------------------------------" -ForegroundColor Yellow
+                            Write-Host "Network join is successful, ready for GBS IT to configure." -ForegroundColor Yellow
+                            Write-Host "-------------------------------------------------------------------" -ForegroundColor Yellow
+                        }
+                    } else {
+                        Write-Warning "Could not find information for network $finalJoinedNetworkId in listnetworks output."
+                    }
+                } else {
+                    Write-Warning "Failed to parse 'listnetworks -j' output or it was empty. JSON Output: $networksListJson"
+                }
+            } catch {
+                Write-Warning "Could not check network status via 'listnetworks -j'. Error: $($_.Exception.Message)"
+            }
+        }
+
     } elseif ($performFullConfiguration -and -not $Global:zeroTierCliPath) {
-        Write-Error "DEBUG SCRIPT_STEP: Installation was indicated as successful or skipped to use existing, but ZeroTier CLI path could not be determined. Configuration cannot proceed."
+        Write-Error "Installation was indicated as successful or skipped to use existing, but ZeroTier CLI path could not be determined. Configuration cannot proceed."
     } else {
-        Write-Warning "DEBUG SCRIPT_STEP: ZeroTier installation/download failed or was skipped without a valid existing CLI. Network configuration will not proceed."
+        Write-Warning "ZeroTier installation/download failed or was skipped without a valid existing CLI. Network configuration did not proceed."
     }
     
-    Write-Host "DEBUG SCRIPT_STEP: Main script logic within try block completed."
+    Write-Host "Main script logic within try block completed."
 
 } catch {
     $Global:ScriptCrashed = $true 
@@ -449,7 +488,7 @@ try {
     Write-Error "Script Line Number: $($_.InvocationInfo.ScriptLineNumber)"
     Write-Error "Faulting Line Content: $($_.InvocationInfo.PositionMessage)"
 } finally {
-    Write-Host "DEBUG SCRIPT_STEP: Execution reached the 'finally' block."
+    Write-Host "Execution reached the 'finally' block."
     
     if ($Global:RebootNeededFromInstall -or $Global:RebootNeededFromConfig) {
         Write-Host "`nA reboot is recommended for all changes to take full effect."
@@ -476,4 +515,7 @@ try {
     } else {
         Read-Host "Script execution finished or was exited. Press Enter to close window." 
     }
+
+    # Stop Transcript Logging
+    Stop-Transcript -ErrorAction SilentlyContinue
 }
