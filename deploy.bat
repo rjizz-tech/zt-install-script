@@ -8,7 +8,7 @@ pause
 echo.
 
 echo Launching the Installation and Configuration Script...
-powershell.exe -ExecutionPolicy Bypass -File ".\deploy-sd-wan.ps1"
+powershell.exe -ExecutionPolicy Bypass -File "%~dp0deploy-sd-wan.ps1"
 
 echo.
 echo The script has finished. You can review any messages above.
