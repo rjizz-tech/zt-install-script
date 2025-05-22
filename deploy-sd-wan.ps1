@@ -9,18 +9,13 @@
     2.  If installed, prompts the user if they wish to re-install.
         - If yes, it attempts to uninstall the existing version silently.
     3.  If not installed, or if re-installation is chosen, it downloads the latest ZeroTier One MSI.
-    4.  Installs ZeroTier One silently in headless mode using ADDLOCAL=ALL (to prevent MSI Error 2711).
+    4.  Installs ZeroTier One silently in headless mode using ADDLOCAL=Service,Cli
     5.  Prompts the user to input a ZeroTier Network ID, trimming any whitespace.
     6.  Attempts to join the network using 'zerotier-cli.bat join <NetworkID>' with detailed job output.
     7.  Waits for a '200 join OK' response. If not received or if the command hangs for over 30 seconds, it re-prompts.
     8.  Checks for and creates/sets the 'IPEnableRouter' registry value to 1.
     9.  Outputs the ZeroTier Node ID, joined Network ID, and IP forwarding status.
     10. Prompts the user if they want to reboot now or later, based on script actions.
-.NOTES
-    Author: Gemini AI
-    Version: 1.3
-    Requires: Administrator privileges to install software and modify the registry.
-              Internet connectivity to download ZeroTier and join the network.
 #>
 
 # --- Script Configuration ---
@@ -172,7 +167,7 @@ Function Install-ZeroTier {
         "/qn"                          
         "RUN_SERVICE=1"                
         "START_SERVICE_AFTER_INSTALL=1"
-        "ADDLOCAL=ALL"                 # Fix for 1603 Error 2711
+        "ADDLOCAL=Service,Cli"
         "/norestart"                   
         "/L*V `"$installLogPath`""     
     )
