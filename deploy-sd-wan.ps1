@@ -457,7 +457,7 @@ try {
                         Write-Host "Status for network $finalJoinedNetworkId : $($joinedNetworkInfo.status)"
                         if ($joinedNetworkInfo.status -eq "ACCESS_DENIED") {
                             Write-Host "-------------------------------------------------------------------" -ForegroundColor Yellow
-                            Write-Host "Network join is successful, ready for GBS IT to configure." -ForegroundColor Yellow
+                            Write-Host "Network join is successful, ready for IT to authorise." -ForegroundColor Yellow
                             Write-Host "-------------------------------------------------------------------" -ForegroundColor Yellow
                         }
                     } else {
@@ -476,8 +476,6 @@ try {
     } else {
         Write-Warning "ZeroTier installation/download failed or was skipped without a valid existing CLI. Network configuration did not proceed."
     }
-    
-    Write-Host "Main script logic within try block completed."
 
 } catch {
     $Global:ScriptCrashed = $true 
@@ -488,7 +486,7 @@ try {
     Write-Error "Script Line Number: $($_.InvocationInfo.ScriptLineNumber)"
     Write-Error "Faulting Line Content: $($_.InvocationInfo.PositionMessage)"
 } finally {
-    Write-Host "Execution reached the 'finally' block."
+    Write-Host "Deployment complete"
     
     if ($Global:RebootNeededFromInstall -or $Global:RebootNeededFromConfig) {
         Write-Host "`nA reboot is recommended for all changes to take full effect."
@@ -511,9 +509,9 @@ try {
     }
 
     if ($Global:ScriptCrashed) {
-        Read-Host "CRITICAL ERROR OCCURRED. Review messages above. Press Enter to exit script."
+        Read-Host "`nCRITICAL ERROR OCCURRED. Review messages above. Press Enter to exit script"
     } else {
-        Read-Host "Script execution finished or was exited. Press Enter to close window." 
+        Read-Host "`nScript execution finished or was exited. Press Enter to close window" 
     }
 
     # Stop Transcript Logging
